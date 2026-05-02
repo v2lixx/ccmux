@@ -1,11 +1,13 @@
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   listMessages,
   listVulnsBySession,
@@ -180,6 +182,23 @@ app.post("/api/broadcast", async (c) => {
 });
 
 app.get("/api/vulns", (c) => c.json(listAllVulns()));
+
+// JSON 404 for unmatched /api/* — keeps API errors out of the SPA fallback.
+app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
+
+// Static web bundle (production). After `npm run build`, web/dist/ contains the
+// compiled SPA. Serve it from the same port as the API. In dev mode, web/dist
+// usually doesn't exist — guard so the server stays API-only.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const WEB_DIST = resolve(__dirname, "../../web/dist");
+if (existsSync(WEB_DIST)) {
+  app.use("/*", serveStatic({ root: WEB_DIST }));
+  app.get("/*", (c) =>
+    c.body(readFileSync(resolve(WEB_DIST, "index.html"), "utf-8"), 200, {
+      "Content-Type": "text/html; charset=utf-8",
+    }),
+  );
+}
 
 const server = serve({ fetch: app.fetch, hostname: HOST, port: PORT }, (info) => {
   // eslint-disable-next-line no-console
