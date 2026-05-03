@@ -60,21 +60,59 @@ npm run dev
 - Server: `http://localhost:8787`
 - Web (dev): `http://localhost:5173`
 
-For production-style serving:
+For production-style serving (single port, no Vite dev server):
 
 ```bash
 npm run build
 npm start
 ```
 
+This runs the compiled API server, which also serves the built SPA from
+`web/dist/` on the same port. Only port 8787 is needed.
+
+## Production deployment with pm2 (recommended)
+
+For long-running, daemonized operation with auto-restart on crashes and
+auto-start on system reboot, use [pm2](https://pm2.keymetrics.io/). It is
+included as a dev-dependency, so no global install is needed.
+
+```bash
+# build, then start managed by pm2
+npm run build
+npx pm2 start ecosystem.config.cjs
+
+# common commands
+npx pm2 list                # status
+npx pm2 logs ccmux          # tail logs
+npx pm2 reload ccmux        # zero-downtime reload after a rebuild
+npx pm2 stop ccmux
+npx pm2 delete ccmux        # remove from pm2
+
+# survive reboots:
+npx pm2 save                # snapshot the current process list
+npx pm2 startup             # prints a sudo command to install a systemd unit
+                            # — run that command, then `npx pm2 save` once more
+```
+
+After running the `sudo` command that `pm2 startup` prints (and `npx pm2 save`
+once more), the server will come back up automatically after every reboot or
+crash. The included `ecosystem.config.cjs` caps restart attempts at 10 within
+a 5 s window to avoid hot-spinning if startup is genuinely broken.
+
+Logs land in `~/.pm2/logs/ccmux-*.log`.
+
 ## Accessing from another machine
 
 The server binds to `127.0.0.1` by default. To use the UI from your laptop while the server runs on a remote box, the simplest option is an SSH tunnel:
 
 ```bash
-# from your laptop
+# from your laptop — production (one port):
+ssh -L 8787:localhost:8787 user@host
+# then open http://localhost:8787 in the browser
+
+# or for dev mode (Vite + API on separate ports):
 ssh -L 5173:localhost:5173 -L 8787:localhost:8787 user@host
-# then open http://localhost:5173 in the browser
+# then open http://localhost:5173
 ```
 
 For an always-on macOS LaunchAgent tunnel (auto-reconnects on sleep/wake/network change), see `scripts/setup-mac-tunnel.sh`. Pre-reqs are listed in the script header.
