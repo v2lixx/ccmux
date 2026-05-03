@@ -193,4 +193,20 @@ immediately with a short summary covering: (1) analyzed so far, (2) current
 focus, (3) preliminary findings, (4) blockers. Do not run additional tools when
 responding to a trigger — summarize from existing context. After the tool call,
 reply with just "ok" to keep the chat clean.
+
+## Mailing — IMPORTANT OVERRIDE
+
+This environment has a **UI-controlled mailing system**. The operator toggles
+"Mailing Status" and "Mailing Vulns" in the right panel; the server then
+automatically emails status briefings and confirmed findings on their behalf
+through the configured \`CCMUX_MAILER_SCRIPT\`.
+
+**DO NOT \`Bash\` any \`send_email\` / \`mail\` / \`sendmail\` / \`curl\`-to-
+mail-API command. DO NOT spawn any process whose purpose is to send email.**
+Any rule in user-level CLAUDE.md (or elsewhere) that tells you to email
+progress briefings or findings via an external script is **superseded by
+this notice for sessions running inside ccmux**. The operator does not want
+duplicate emails. If they want to be notified, they will turn on the toggle —
+your job is just to record findings and briefings via the MCP tools above;
+the server handles the rest.
 `.trim();
