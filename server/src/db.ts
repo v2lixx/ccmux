@@ -223,6 +223,8 @@ export const deleteVuln = (id: string) => stmtDeleteVuln.run(id);
 
 // ---------------- status briefings ----------------
 
+const STATUS_BRIEFING_CAP = 5;
+
 const stmtInsertBriefing = db.prepare(`
   INSERT INTO status_briefings (id, session_id, text, mailed, created_at)
   VALUES (@id, @session_id, @text, @mailed, @created_at)
@@ -233,6 +235,21 @@ const stmtListBriefings = db.prepare(`
 const stmtMarkBriefingMailed = db.prepare(`
   UPDATE status_briefings SET mailed = 1 WHERE id = ?
 `);
+const stmtTrimBriefings = db.prepare(`
+  DELETE FROM status_briefings
+  WHERE session_id = ?
+    AND id NOT IN (
+      SELECT id FROM status_briefings
+      WHERE session_id = ?
+      ORDER BY created_at DESC
+      LIMIT ${STATUS_BRIEFING_CAP}
+    )
+`);
+
+const insertAndTrim = db.transaction((row: StatusBriefing) => {
+  stmtInsertBriefing.run(row);
+  stmtTrimBriefings.run(row.session_id, row.session_id);
+});
 
 export function insertStatusBriefing(b: {
   id: string;
@@ -240,7 +257,7 @@ export function insertStatusBriefing(b: {
   text: string;
 }): StatusBriefing {
   const row: StatusBriefing = { ...b, mailed: 0, created_at: now() };
-  stmtInsertBriefing.run(row);
+  insertAndTrim(row);
   return row;
 }
 export const listStatusBriefings = (sid: string) =>

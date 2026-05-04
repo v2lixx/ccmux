@@ -334,15 +334,18 @@ export const useStore = create<State>((set, get) => ({
       return { vulnsBySession: { ...st.vulnsBySession, [sid]: list } };
     }),
   setStatus: (sid, list) =>
-    set((st) => ({ statusBySession: { ...st.statusBySession, [sid]: list } })),
+    set((st) => ({
+      statusBySession: { ...st.statusBySession, [sid]: list.slice(-5) },
+    })),
   appendStatus: (item) =>
     set((st) => {
       const list = st.statusBySession[item.session_id] ?? [];
       if (list.some((x) => x.id === item.id)) return {};
+      const next = [...list, item].slice(-5);
       return {
         statusBySession: {
           ...st.statusBySession,
-          [item.session_id]: [...list, item],
+          [item.session_id]: next,
         },
       };
     }),

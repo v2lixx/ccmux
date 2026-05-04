@@ -64,6 +64,9 @@ export const CodeIcon = (p: SVGProps<SVGSVGElement>) => (
 export const ChevronRightIcon = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="m9 18 6-6-6-6" /></I>
 );
+export const ChevronLeftIcon = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="m15 18-6-6 6-6" /></I>
+);
 export const ScissorsIcon = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>
     <circle cx="6" cy="6" r="3" />
