@@ -34,6 +34,12 @@ interface State {
    *  scroll-restore on real data instead of cached partials. */
   msgsHydratedTick: Record<string, number>;
 
+  /** Per-session "show only last N messages". null/undefined = show all.
+   *  Trims the rendered list to keep typing/scroll snappy on long sessions. */
+  displayLimitBySession: Record<string, number | null>;
+  trimMessages: (sid: string) => void;
+  showAllMessages: (sid: string) => void;
+
   // global mailing settings (persisted server-side)
   mailing: MailingSettings;
   patchMailing: (patch: Partial<MailingSettings>) => Promise<void>;
@@ -78,6 +84,25 @@ const initialTheme = (): Theme => {
 const initialActiveId = (): string | null => {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("ccmux.activeId");
+};
+
+const LIMITS_KEY = "ccmux.displayLimits";
+const loadDisplayLimits = (): Record<string, number | null> => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(LIMITS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number | null>) : {};
+  } catch {
+    return {};
+  }
+};
+const saveDisplayLimits = (m: Record<string, number | null>) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LIMITS_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore */
+  }
 };
 
 // localStorage cache — hydrate instantly on refresh before the WS round-trip.
@@ -175,6 +200,28 @@ export const useStore = create<State>((set, get) => ({
   activityBySession: {},
   rateLimitBySession: {},
   msgsHydratedTick: {},
+
+  displayLimitBySession: loadDisplayLimits(),
+  trimMessages: (sid) =>
+    set((st) => {
+      const cur = st.displayLimitBySession[sid];
+      const total = st.messagesBySession[sid]?.length ?? 0;
+      if (total === 0) return {};
+      const baseline = cur ?? total;
+      const next = Math.max(20, Math.ceil(baseline / 3));
+      if (next >= baseline) return {};
+      const m = { ...st.displayLimitBySession, [sid]: next };
+      saveDisplayLimits(m);
+      return { displayLimitBySession: m };
+    }),
+  showAllMessages: (sid) =>
+    set((st) => {
+      if (!(sid in st.displayLimitBySession)) return {};
+      const m = { ...st.displayLimitBySession };
+      delete m[sid];
+      saveDisplayLimits(m);
+      return { displayLimitBySession: m };
+    }),
 
   mailing: cache?.mailing ?? defaultMailing,
   patchMailing: async (patch) => {

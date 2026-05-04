@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../lib/store";
 import type { ChatMessage, ModelId, Session } from "../lib/types";
-import { BroadcastIcon, SendIcon, StopIcon, ToolIcon } from "./icons";
+import { BroadcastIcon, ScissorsIcon, SendIcon, StopIcon, ToolIcon } from "./icons";
 import { Markdown } from "./Markdown";
 import { ModelPicker } from "./ModelPicker";
 
@@ -26,7 +26,15 @@ function EmptyState() {
 }
 
 function ChatPaneInner({ session }: { session: Session }) {
-  const messages = useStore((s) => s.messagesBySession[session.id] ?? EMPTY_MESSAGES);
+  const allMessages = useStore((s) => s.messagesBySession[session.id] ?? EMPTY_MESSAGES);
+  const limit = useStore((s) => s.displayLimitBySession[session.id] ?? null);
+  const trimMessages = useStore((s) => s.trimMessages);
+  const showAllMessages = useStore((s) => s.showAllMessages);
+  // Slice for display only — full list stays in DB and store.
+  const messages = useMemo(
+    () => (limit != null && limit < allMessages.length ? allMessages.slice(-limit) : allMessages),
+    [allMessages, limit],
+  );
   const hydrationTick = useStore((s) => s.msgsHydratedTick[session.id] ?? 0);
   const send = useStore((s) => s.send);
   const broadcastMode = useStore((s) => s.broadcastMode);
@@ -135,6 +143,18 @@ function ChatPaneInner({ session }: { session: Session }) {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages.length, phase]);
 
+  // When the user trims (or shows all), jump to bottom — the previous
+  // scrollTop references a layout that no longer exists.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+      stickToBottom.current = true;
+      setShowJump(false);
+    });
+  }, [limit]);
+
   const submit = () => {
     const t = text.trim();
     if (!t) return;
@@ -163,19 +183,58 @@ function ChatPaneInner({ session }: { session: Session }) {
           <div className="text-sm text-text truncate">{session.name}</div>
           <div className="text-[11px] text-muted font-mono truncate">{session.target_dir}</div>
         </div>
-        <span
-          className={[
-            "ml-auto text-[10px] uppercase tracking-wider px-2 py-0.5 rounded",
-            session.status === "running"
-              ? "bg-accent/15 text-accent"
-              : session.status === "error"
-              ? "bg-danger/15 text-danger"
-              : "bg-elev text-muted",
-          ].join(" ")}
-        >
-          {session.status}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => trimMessages(session.id)}
+            disabled={allMessages.length === 0 || (limit != null && limit <= 20)}
+            className={[
+              "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] transition-colors",
+              limit != null
+                ? "bg-accent/15 text-accent hover:bg-accent/25"
+                : "text-muted hover:bg-elev hover:text-text",
+              "disabled:opacity-40 disabled:cursor-not-allowed",
+            ].join(" ")}
+            title={
+              limit != null
+                ? `Showing last ${messages.length} of ${allMessages.length} — click to trim further`
+                : "Hide older messages from the view (speeds up typing on long sessions)"
+            }
+          >
+            <ScissorsIcon width={12} height={12} />
+            <span className="font-medium tabular-nums">
+              {limit != null ? `${messages.length}/${allMessages.length}` : "Trim"}
+            </span>
+          </button>
+          <span
+            className={[
+              "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded",
+              session.status === "running"
+                ? "bg-accent/15 text-accent"
+                : session.status === "error"
+                ? "bg-danger/15 text-danger"
+                : "bg-elev text-muted",
+            ].join(" ")}
+          >
+            {session.status}
+          </span>
+        </div>
       </header>
+
+      {limit != null && (
+        <div className="bg-bg/40 border-b border-line/60 px-5 py-1.5 text-[11px] text-muted flex items-center gap-2">
+          <ScissorsIcon className="text-accent/70" width={11} height={11} />
+          <span>
+            Showing last <span className="text-text tabular-nums">{messages.length}</span> of{" "}
+            <span className="text-text tabular-nums">{allMessages.length}</span> messages.
+          </span>
+          <button
+            onClick={() => showAllMessages(session.id)}
+            className="ml-auto text-accent hover:underline"
+          >
+            show all
+          </button>
+        </div>
+      )}
 
       {rateLimit && (
         <div className="bg-danger/12 border-b border-danger/30 px-5 py-2.5 text-[12px] text-danger flex items-center gap-3">
@@ -276,7 +335,9 @@ function ChatPaneInner({ session }: { session: Session }) {
   );
 }
 
-function MessageRow({ m }: { m: ChatMessage }) {
+// Memoized so typing in the composer does not re-render every Markdown block.
+// Messages are immutable once persisted — same id implies same content.
+const MessageRow = memo(function MessageRow({ m }: { m: ChatMessage }) {
   if (m.role === "user") {
     // Internal status-briefing triggers render as a compact pill.
     if (m.content.startsWith(STATUS_TRIGGER_PREFIX)) {
@@ -312,9 +373,9 @@ function MessageRow({ m }: { m: ChatMessage }) {
       {m.content}
     </div>
   );
-}
+});
 
-function ToolBlock({ m }: { m: ChatMessage }) {
+const ToolBlock = memo(function ToolBlock({ m }: { m: ChatMessage }) {
   const [open, setOpen] = useState(false);
   const label = useMemo(() => {
     if (m.tool_name) return m.tool_name;
@@ -350,4 +411,4 @@ function ToolBlock({ m }: { m: ChatMessage }) {
       )}
     </div>
   );
-}
+});
