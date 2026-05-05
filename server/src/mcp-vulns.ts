@@ -183,6 +183,18 @@ Default \`status\` is \`confirmed\`. Required fields for serious findings:
 when known and \`poc_path\` once you have a PoC. Severity reflects exploit
 impact, not just sanitizer noise.
 
+### Deduplication against an operator tracking log
+
+If a Markdown file at \`<cwd>/README.md\` (or another path the operator
+points you at) tracks already-found / already-disclosed vulnerabilities,
+read it BEFORE calling \`vuln_create\` and skip candidates that match an
+existing entry by **package + bug class + sink file/function**. After
+a successful \`vuln_create\` for a genuinely new finding, append a brief
+entry to that same log using the file's existing Markdown shape (use the
+\`Edit\` tool). This keeps disclosed and pending findings de-duplicated
+across long-running parallel sessions. If no such log exists, just record
+via \`vuln_create\` and skip the append step.
+
 ## Status briefings
 - \`mcp__office__status_briefing\` — 2–4 sentence progress summary that appears
   in the Status panel and is optionally emailed.
